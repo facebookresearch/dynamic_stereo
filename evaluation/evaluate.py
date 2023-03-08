@@ -113,7 +113,7 @@ def run_eval(cfg: DefaultConfig):
         evaluate_result
     )
     
-    result_file = os.path.join(cfg.exp_dir, f"result_eval_.json")
+    result_file = os.path.join(cfg.exp_dir, f"result_eval.json")
 
     print(f"Dumping eval results to {result_file}.")
     with open(result_file, "w") as f:

@@ -32,6 +32,7 @@ class PerceptionPrediction:
     """
 
     depth_map: Optional[torch.Tensor] = None
+    disparity: Optional[torch.Tensor] = None
     image_rgb: Optional[torch.Tensor] = None
     fg_probability: Optional[torch.Tensor] = None
     
@@ -75,7 +76,7 @@ def aggregate_and_print_results(
 def pretty_print_perception_metrics(results):
 
     metrics = sorted(
-        list(results.keys()), key=lambda x: (x.metric, x.include_foreground)
+        list(results.keys()), key=lambda x: x.metric
     )
 
     print("===== Perception results =====")
@@ -84,80 +85,7 @@ def pretty_print_perception_metrics(results):
             [[metric, results[metric]] for metric in metrics],
         )
     )
-@torch.no_grad()
-def _draw_keypoints(
-    image: torch.Tensor,
-    keypoints: torch.Tensor,
-    connectivity: Optional[List[Tuple[int, int]]] = None,
-    colors: Optional[Union[str, Tuple[int, int, int]]] = None,
-    radius: int = 2,
-    width: int = 3,
-) -> torch.Tensor:
-
-    """
-    Draws Keypoints on given RGB image.
-    The values of the input image should be uint8 between 0 and 255.
-    Args:
-        image (Tensor): Tensor of shape (3, H, W) and dtype uint8.
-        keypoints (Tensor): Tensor of shape (num_instances, K, 2) the K keypoints location for each of the N instances,
-            in the format [x, y].
-        connectivity (List[Tuple[int, int]]]): A List of tuple where,
-            each tuple contains pair of keypoints to be connected.
-        colors (str, Tuple): The color can be represented as
-            PIL strings e.g. "red" or "#FF00FF", or as RGB tuples e.g. ``(240, 10, 157)``.
-        radius (int): Integer denoting radius of keypoint.
-        width (int): Integer denoting width of line connecting keypoints.
-    Returns:
-        img (Tensor[C, H, W]): Image Tensor of dtype uint8 with keypoints drawn.
-    """
-
-    if not isinstance(image, torch.Tensor):
-        raise TypeError(f"The image must be a tensor, got {type(image)}")
-    elif image.dtype != torch.uint8:
-        raise ValueError(f"The image dtype must be uint8, got {image.dtype}")
-    elif image.dim() != 3:
-        raise ValueError("Pass individual images, not batches")
-    elif image.size()[0] != 3:
-        raise ValueError("Pass an RGB image. Other Image formats are not supported")
-
-    if keypoints.ndim != 3:
-        raise ValueError("keypoints must be of shape (num_instances, K, 2)")
-
-    ndarr = image.permute(1, 2, 0).cpu().numpy()
-    img_to_draw = Image.fromarray(ndarr)
-    draw = ImageDraw.Draw(img_to_draw)
-    img_kpts = keypoints.to(torch.int64).tolist()
     
-    for kpt_id, kpt_inst in enumerate(img_kpts):
-        # print('img_kpts',len(kpt_inst))
-        for inst_id, kpt in enumerate(kpt_inst):
-            x1 = kpt[0] - radius
-            x2 = kpt[0] + radius
-            y1 = kpt[1] - radius
-            y2 = kpt[1] + radius
-            if isinstance(colors, torch.Tensor):
-                color = tuple(colors[inst_id].numpy())
-            else:
-                color = colors
-            # print('color',color)
-            draw.ellipse([x1, y1, x2, y2], fill=color, outline=None, width=0)
-
-        if connectivity:
-            for connection in connectivity:
-                start_pt_x = kpt_inst[connection[0]][0]
-                start_pt_y = kpt_inst[connection[0]][1]
-
-                end_pt_x = kpt_inst[connection[1]][0]
-                end_pt_y = kpt_inst[connection[1]][1]
-
-                draw.line(
-                    ((start_pt_x, start_pt_y), (end_pt_x, end_pt_y)),
-                    width=width,
-                )
-
-    return (
-        torch.from_numpy(np.array(img_to_draw)).permute(2, 0, 1).to(dtype=torch.uint8)
-    )
 
 def depth_to_pcd(
     depth_map,
@@ -213,133 +141,133 @@ def filter_outliers(pcd, sigma=3):
     return pcd, inds
 
 def read_calibration(calibration_file, resolution_string):
-        # ported from https://github.com/stereolabs/zed-open-capture/
-        # blob/dfa0aee51ccd2297782230a05ca59e697df496b2/examples/include/calibration.hpp#L4172
+    # ported from https://github.com/stereolabs/zed-open-capture/
+    # blob/dfa0aee51ccd2297782230a05ca59e697df496b2/examples/include/calibration.hpp#L4172
 
-        zed_resolutions = {
-            "2K": (1242, 2208),
-            "FHD": (1080, 1920),
-            "HD": (720, 1280),
-            # "qHD": (540, 960),
-            "VGA": (376, 672),
-        }
-        assert resolution_string in zed_resolutions.keys()
-        image_height, image_width = zed_resolutions[resolution_string]
+    zed_resolutions = {
+        "2K": (1242, 2208),
+        "FHD": (1080, 1920),
+        "HD": (720, 1280),
+        # "qHD": (540, 960),
+        "VGA": (376, 672),
+    }
+    assert resolution_string in zed_resolutions.keys()
+    image_height, image_width = zed_resolutions[resolution_string]
 
-        # Open camera configuration file
-        assert os.path.isfile(calibration_file)
-        calib = configparser.ConfigParser()
-        calib.read(calibration_file)
+    # Open camera configuration file
+    assert os.path.isfile(calibration_file)
+    calib = configparser.ConfigParser()
+    calib.read(calibration_file)
 
-        # Get translations
-        T = np.zeros((3, 1))
-        T[0] = float(calib["STEREO"]["baseline"])
-        T[1] = float(calib["STEREO"]["ty"])
-        T[2] = float(calib["STEREO"]["tz"])
+    # Get translations
+    T = np.zeros((3, 1))
+    T[0] = float(calib["STEREO"]["baseline"])
+    T[1] = float(calib["STEREO"]["ty"])
+    T[2] = float(calib["STEREO"]["tz"])
 
-        baseline = T[0]
+    baseline = T[0]
 
-        # Get left parameters
-        left_cam_cx = float(calib[f"LEFT_CAM_{resolution_string}"]["cx"])
-        left_cam_cy = float(calib[f"LEFT_CAM_{resolution_string}"]["cy"])
-        left_cam_fx = float(calib[f"LEFT_CAM_{resolution_string}"]["fx"])
-        left_cam_fy = float(calib[f"LEFT_CAM_{resolution_string}"]["fy"])
-        left_cam_k1 = float(calib[f"LEFT_CAM_{resolution_string}"]["k1"])
-        left_cam_k2 = float(calib[f"LEFT_CAM_{resolution_string}"]["k2"])
-        left_cam_p1 = float(calib[f"LEFT_CAM_{resolution_string}"]["p1"])
-        left_cam_p2 = float(calib[f"LEFT_CAM_{resolution_string}"]["p2"])
-        left_cam_k3 = float(calib[f"LEFT_CAM_{resolution_string}"]["k3"])
+    # Get left parameters
+    left_cam_cx = float(calib[f"LEFT_CAM_{resolution_string}"]["cx"])
+    left_cam_cy = float(calib[f"LEFT_CAM_{resolution_string}"]["cy"])
+    left_cam_fx = float(calib[f"LEFT_CAM_{resolution_string}"]["fx"])
+    left_cam_fy = float(calib[f"LEFT_CAM_{resolution_string}"]["fy"])
+    left_cam_k1 = float(calib[f"LEFT_CAM_{resolution_string}"]["k1"])
+    left_cam_k2 = float(calib[f"LEFT_CAM_{resolution_string}"]["k2"])
+    left_cam_p1 = float(calib[f"LEFT_CAM_{resolution_string}"]["p1"])
+    left_cam_p2 = float(calib[f"LEFT_CAM_{resolution_string}"]["p2"])
+    left_cam_k3 = float(calib[f"LEFT_CAM_{resolution_string}"]["k3"])
 
-        # Get right parameters
-        right_cam_cx = float(calib[f"RIGHT_CAM_{resolution_string}"]["cx"])
-        right_cam_cy = float(calib[f"RIGHT_CAM_{resolution_string}"]["cy"])
-        right_cam_fx = float(calib[f"RIGHT_CAM_{resolution_string}"]["fx"])
-        right_cam_fy = float(calib[f"RIGHT_CAM_{resolution_string}"]["fy"])
-        right_cam_k1 = float(calib[f"RIGHT_CAM_{resolution_string}"]["k1"])
-        right_cam_k2 = float(calib[f"RIGHT_CAM_{resolution_string}"]["k2"])
-        right_cam_p1 = float(calib[f"RIGHT_CAM_{resolution_string}"]["p1"])
-        right_cam_p2 = float(calib[f"RIGHT_CAM_{resolution_string}"]["p2"])
-        right_cam_k3 = float(calib[f"RIGHT_CAM_{resolution_string}"]["k3"])
+    # Get right parameters
+    right_cam_cx = float(calib[f"RIGHT_CAM_{resolution_string}"]["cx"])
+    right_cam_cy = float(calib[f"RIGHT_CAM_{resolution_string}"]["cy"])
+    right_cam_fx = float(calib[f"RIGHT_CAM_{resolution_string}"]["fx"])
+    right_cam_fy = float(calib[f"RIGHT_CAM_{resolution_string}"]["fy"])
+    right_cam_k1 = float(calib[f"RIGHT_CAM_{resolution_string}"]["k1"])
+    right_cam_k2 = float(calib[f"RIGHT_CAM_{resolution_string}"]["k2"])
+    right_cam_p1 = float(calib[f"RIGHT_CAM_{resolution_string}"]["p1"])
+    right_cam_p2 = float(calib[f"RIGHT_CAM_{resolution_string}"]["p2"])
+    right_cam_k3 = float(calib[f"RIGHT_CAM_{resolution_string}"]["k3"])
 
-        # Get rotations
-        R_zed = np.zeros(3)
-        R_zed[0] = float(calib["STEREO"][f"rx_{resolution_string.lower()}"])
-        R_zed[1] = float(calib["STEREO"][f"cv_{resolution_string.lower()}"])
-        R_zed[2] = float(calib["STEREO"][f"rz_{resolution_string.lower()}"])
+    # Get rotations
+    R_zed = np.zeros(3)
+    R_zed[0] = float(calib["STEREO"][f"rx_{resolution_string.lower()}"])
+    R_zed[1] = float(calib["STEREO"][f"cv_{resolution_string.lower()}"])
+    R_zed[2] = float(calib["STEREO"][f"rz_{resolution_string.lower()}"])
 
-        R = cv2.Rodrigues(R_zed)[0]
+    R = cv2.Rodrigues(R_zed)[0]
 
-        # Left
-        cameraMatrix_left = np.array(
-            [[left_cam_fx, 0, left_cam_cx], [0, left_cam_fy, left_cam_cy], [0, 0, 1]]
-        )
-        distCoeffs_left = np.array(
-            [left_cam_k1, left_cam_k2, left_cam_p1, left_cam_p2, left_cam_k3]
-        )
+    # Left
+    cameraMatrix_left = np.array(
+        [[left_cam_fx, 0, left_cam_cx], [0, left_cam_fy, left_cam_cy], [0, 0, 1]]
+    )
+    distCoeffs_left = np.array(
+        [left_cam_k1, left_cam_k2, left_cam_p1, left_cam_p2, left_cam_k3]
+    )
 
-        # Right
-        cameraMatrix_right = np.array(
-            [
-                [right_cam_fx, 0, right_cam_cx],
-                [0, right_cam_fy, right_cam_cy],
-                [0, 0, 1],
-            ]
-        )
-        distCoeffs_right = np.array(
-            [right_cam_k1, right_cam_k2, right_cam_p1, right_cam_p2, right_cam_k3]
-        )
+    # Right
+    cameraMatrix_right = np.array(
+        [
+            [right_cam_fx, 0, right_cam_cx],
+            [0, right_cam_fy, right_cam_cy],
+            [0, 0, 1],
+        ]
+    )
+    distCoeffs_right = np.array(
+        [right_cam_k1, right_cam_k2, right_cam_p1, right_cam_p2, right_cam_k3]
+    )
 
-        # Stereo
-        R1, R2, P1, P2, Q = cv2.stereoRectify(
-            cameraMatrix1=cameraMatrix_left,
-            distCoeffs1=distCoeffs_left,
-            cameraMatrix2=cameraMatrix_right,
-            distCoeffs2=distCoeffs_right,
-            imageSize=(image_width, image_height),
-            R=R,
-            T=T,
-            flags=cv2.CALIB_ZERO_DISPARITY,
-            newImageSize=(image_width, image_height),
-            alpha=0,
-        )[:5]
+    # Stereo
+    R1, R2, P1, P2, Q = cv2.stereoRectify(
+        cameraMatrix1=cameraMatrix_left,
+        distCoeffs1=distCoeffs_left,
+        cameraMatrix2=cameraMatrix_right,
+        distCoeffs2=distCoeffs_right,
+        imageSize=(image_width, image_height),
+        R=R,
+        T=T,
+        flags=cv2.CALIB_ZERO_DISPARITY,
+        newImageSize=(image_width, image_height),
+        alpha=0,
+    )[:5]
 
-        # Precompute maps for cv::remap()
-        map_left_x, map_left_y = cv2.initUndistortRectifyMap(
-            cameraMatrix_left,
-            distCoeffs_left,
-            R1,
-            P1,
-            (image_width, image_height),
-            cv2.CV_32FC1,
-        )
-        map_right_x, map_right_y = cv2.initUndistortRectifyMap(
-            cameraMatrix_right,
-            distCoeffs_right,
-            R2,
-            P2,
-            (image_width, image_height),
-            cv2.CV_32FC1,
-        )
+    # Precompute maps for cv::remap()
+    map_left_x, map_left_y = cv2.initUndistortRectifyMap(
+        cameraMatrix_left,
+        distCoeffs_left,
+        R1,
+        P1,
+        (image_width, image_height),
+        cv2.CV_32FC1,
+    )
+    map_right_x, map_right_y = cv2.initUndistortRectifyMap(
+        cameraMatrix_right,
+        distCoeffs_right,
+        R2,
+        P2,
+        (image_width, image_height),
+        cv2.CV_32FC1,
+    )
 
-        zed_calib = {
-            "map_left_x": map_left_x,
-            "map_left_y": map_left_y,
-            "map_right_x": map_right_x,
-            "map_right_y": map_right_y,
-            "pose_left": P1,
-            "pose_right": P2,
-            "baseline": baseline,
-            "image_width": image_width,
-            "image_height": image_height,
-        }
+    zed_calib = {
+        "map_left_x": map_left_x,
+        "map_left_y": map_left_y,
+        "map_right_x": map_right_x,
+        "map_right_y": map_right_y,
+        "pose_left": P1,
+        "pose_right": P2,
+        "baseline": baseline,
+        "image_width": image_width,
+        "image_height": image_height,
+    }
 
-        return zed_calib
+    return zed_calib
         
-def visualize_batch_mimo(
+def visualize_batch(
     batch_dict: dict,
-    ref_frame,
     preds: PerceptionPrediction,
     output_dir: str,
+    ref_frame: int = 0,
     only_foreground=False,
     step=0,
     sequence_name=None,

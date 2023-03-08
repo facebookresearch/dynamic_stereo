@@ -12,12 +12,8 @@ from tqdm import tqdm
 from omegaconf import DictConfig
 from pytorch3d.implicitron.tools.config import Configurable
 
-from dynamic_stereo.evaluation.utils.eval_utils import depth2disparity_scale, eval_batch_mimo
-from dynamic_stereo.evaluation.utils.utils import PerceptionPrediction, pretty_print_perception_metrics, visualize_batch_mimo
-
-import sys
-
-sys.path.append('/private/home/nikitakaraev/dev/pixar_replay/')
+from dynamic_stereo.evaluation.utils.eval_utils import depth2disparity_scale, eval_batch
+from dynamic_stereo.evaluation.utils.utils import PerceptionPrediction, pretty_print_perception_metrics, visualize_batch
 
 
 class Evaluator(Configurable):
@@ -71,23 +67,16 @@ class Evaluator(Configurable):
                 predictions = model.forward_batch_test(batch_dict)
             else:
                 predictions = model(batch_dict)
-                
-            if "disparity" in predictions:
-                predictions["disparity"] = predictions["disparity"][:, :1].clone().cpu()
-                
-                if not is_real_data:
-                    predictions["disparity"] = predictions["disparity"]*(batch_dict["disparity_mask"].round())
-
-            if "flow" in predictions:
-                raise ValueError('flow isn\'t supported')
-
-            ref_frame = 0
+            
+            assert "disparity" in predictions
+            predictions["disparity"] = predictions["disparity"][:, :1].clone().cpu()
+            
             if not is_real_data:
-                batch_eval_result, seq_length = eval_batch_mimo(
+                predictions["disparity"] = predictions["disparity"]*(batch_dict["disparity_mask"].round())
+
+                batch_eval_result, seq_length = eval_batch(
                     batch_dict,
-                    predictions,
-                    ref_frame=ref_frame
-                    
+                    predictions
                 )
                 
                 per_batch_eval_results.append((batch_eval_result, seq_length))
@@ -97,22 +86,22 @@ class Evaluator(Configurable):
                 batch_idx % self.visualize_interval == 0
             ):
                 perception_prediction = PerceptionPrediction()
-                if "disparity" in predictions:
-                    pred_disp = predictions["disparity"]
-                    pred_disp[pred_disp < self.eps] = self.eps
+               
+                pred_disp = predictions["disparity"]
+                pred_disp[pred_disp < self.eps] = self.eps
 
-                    scale = depth2disparity_scale(
-                        sequence['viewpoint'][0][0],
-                        sequence['viewpoint'][0][1],
-                        torch.tensor([pred_disp.shape[2],pred_disp.shape[3]])[None]
-                    )
+                scale = depth2disparity_scale(
+                    sequence['viewpoint'][0][0],
+                    sequence['viewpoint'][0][1],
+                    torch.tensor([pred_disp.shape[2],pred_disp.shape[3]])[None]
+                )
 
-                    perception_prediction.depth_map = (scale / pred_disp).cuda()
-                    perspective_cameras = []
-                    for cam in sequence['viewpoint']:
-                        perspective_cameras.append(cam[0])
-                        
-                    perception_prediction.perspective_cameras = perspective_cameras
+                perception_prediction.depth_map = (scale / pred_disp).cuda()
+                perspective_cameras = []
+                for cam in sequence['viewpoint']:
+                    perspective_cameras.append(cam[0])
+                    
+                perception_prediction.perspective_cameras = perspective_cameras
 
 
                 if "stereo_original_video" in batch_dict:
@@ -125,14 +114,12 @@ class Evaluator(Configurable):
                     if isinstance(v, torch.Tensor):
                         batch_dict[k] = v.cuda()
 
-                outputs = visualize_batch_mimo(
+                outputs = visualize_batch(
                     batch_dict,
-                    ref_frame,
                     perception_prediction,
-                    self.visualize_dir,
+                    output_dir=self.visualize_dir,
                     sequence_name=sequence['metadata'][0][0][0],
                     step=step,
-                    writer=writer,
-                    disp_endpoint_error_per_pixel=None
+                    writer=writer
                 )
         return per_batch_eval_results
