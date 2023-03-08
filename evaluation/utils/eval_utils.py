@@ -9,7 +9,6 @@ from pytorch3d.utils import opencv_from_cameras_projection
 @dataclass(eq=True, frozen=True)
 class PerceptionMetric:
     metric: str
-    include_foreground: bool = False
     depth_scaling_norm: Optional[str] = None
     suffix: str = ""
     index: str = ""
@@ -17,7 +16,6 @@ class PerceptionMetric:
     def __str__(self):
         return (
             self.metric
-            + ("_fg" if self.include_foreground else "")
             + self.index
             + (
                 ("_norm_" + self.depth_scaling_norm)
@@ -347,7 +345,7 @@ def _get_flow_trajectories(
 
 
 def eval_batch_mimo(
-    batch_dict, predictions, ref_frame, only_foreground=False, return_epe=False
+    batch_dict, predictions, ref_frame, return_epe=False
 ) -> Dict[str, Union[float, torch.Tensor]]:
     """
     Produce performance metrics for a single batch of perception
@@ -360,7 +358,6 @@ def eval_batch_mimo(
         results: A dictionary holding evaluation metrics.
     """
     results = {}
-    fg = only_foreground
     # for fg in [False, True]:
 
     if "flow_traj" in predictions:
@@ -373,16 +370,16 @@ def eval_batch_mimo(
         )
 
         results[
-            PerceptionMetric("flow_epe_traj_mean", include_foreground=fg)
+            PerceptionMetric("flow_epe_traj_mean")
         ] = eval_flow_traj_output["epe_traj_mean"]
         results[
-            PerceptionMetric("flow_mean_accuracy_5px", include_foreground=fg)
+            PerceptionMetric("flow_mean_accuracy_5px")
         ] = eval_flow_traj_output["mean_accuracy_5px"]
         results[
-            PerceptionMetric("flow_mean_accuracy_3px", include_foreground=fg)
+            PerceptionMetric("flow_mean_accuracy_3px")
         ] = eval_flow_traj_output["mean_accuracy_3px"]
         results[
-            PerceptionMetric("flow_mean_accuracy_1px", include_foreground=fg)
+            PerceptionMetric("flow_mean_accuracy_1px")
         ] = eval_flow_traj_output["mean_accuracy_1px"]
 
         for i, epe_frame_traj in enumerate(eval_flow_traj_output["epe_frame_traj"]):
@@ -391,34 +388,27 @@ def eval_batch_mimo(
                 PerceptionMetric(
                     "flow_epe_frame_traj",
                     index=str_i,
-                    include_foreground=fg,
                 )
             ] = epe_frame_traj
             results[
                 PerceptionMetric(
                     "flow_accuracy_1px",
                     index=str_i,
-                    include_foreground=fg,
                 )
             ] = eval_flow_traj_output["accuracy_1px"][i]
             results[
                 PerceptionMetric(
                     "flow_accuracy_3px",
                     index=str_i,
-                    include_foreground=fg,
                 )
             ] = eval_flow_traj_output["accuracy_3px"][i]
             results[
                 PerceptionMetric(
                     "flow_accuracy_5px",
                     index=str_i,
-                    include_foreground=fg,
                 )
             ] = eval_flow_traj_output["accuracy_5px"][i]
-    if fg:
-        mask_now = batch_dict["fg_mask"]
-    else:
-        mask_now = torch.ones_like(batch_dict["fg_mask"])
+    mask_now = torch.ones_like(batch_dict["fg_mask"])
 
     if "disparity" in predictions:
         mask_now = mask_now * batch_dict["disparity_mask"]
@@ -430,23 +420,23 @@ def eval_batch_mimo(
         # print('eval_flow_traj_output',eval_flow_traj_output.keys())
         for epe_name in ("epe", "temp_epe", "temp_epe_r"):
             results[
-                PerceptionMetric(f"disp_{epe_name}_mean", include_foreground=fg)
+                PerceptionMetric(f"disp_{epe_name}_mean")
             ] = eval_flow_traj_output[f"{epe_name}_mean"]
 
             results[
-                PerceptionMetric(f"disp_{epe_name}_bad_3px", include_foreground=fg)
+                PerceptionMetric(f"disp_{epe_name}_bad_3px")
             ] = eval_flow_traj_output[f"{epe_name}_bad_3px"]
 
             results[
-                PerceptionMetric(f"disp_{epe_name}_bad_2px", include_foreground=fg)
+                PerceptionMetric(f"disp_{epe_name}_bad_2px")
             ] = eval_flow_traj_output[f"{epe_name}_bad_2px"]
 
             results[
-                PerceptionMetric(f"disp_{epe_name}_bad_1px", include_foreground=fg)
+                PerceptionMetric(f"disp_{epe_name}_bad_1px")
             ] = eval_flow_traj_output[f"{epe_name}_bad_1px"]
 
             results[
-                PerceptionMetric(f"disp_{epe_name}_bad_0.5px", include_foreground=fg)
+                PerceptionMetric(f"disp_{epe_name}_bad_0.5px")
             ] = eval_flow_traj_output[f"{epe_name}_bad_0.5px"]
         if 'endpoint_error_per_pixel' in eval_flow_traj_output:
             results["disp_endpoint_error_per_pixel"] = eval_flow_traj_output['endpoint_error_per_pixel']

@@ -9,9 +9,10 @@ from collections import defaultdict
 
 import torch
 from tqdm import tqdm
-from dynamic_stereo.evaluation.utils.eval_utils import depth2disparity_scale, eval_batch_mimo
+from omegaconf import DictConfig
+from pytorch3d.implicitron.tools.config import Configurable
 
-from dynamic_stereo.evaluation.core.base_evaluator import BaseEvaluator
+from dynamic_stereo.evaluation.utils.eval_utils import depth2disparity_scale, eval_batch_mimo
 from dynamic_stereo.evaluation.utils.utils import PerceptionPrediction, pretty_print_perception_metrics, visualize_batch_mimo
 
 import sys
@@ -19,8 +20,7 @@ import sys
 sys.path.append('/private/home/nikitakaraev/dev/pixar_replay/')
 
 
-# @Configurable
-class MIMOEvaluatorSimplified(BaseEvaluator):
+class Evaluator(Configurable):
     """
     A class defining the NVS evaluator.
 
@@ -32,18 +32,22 @@ class MIMOEvaluatorSimplified(BaseEvaluator):
 
     eps = 1e-5
 
+    def setup_visualization(self, cfg: DictConfig) -> None:
+        # Visualization
+        self.visualize_interval = cfg.visualize_interval
+        self.exp_dir = cfg.exp_dir
+        if self.visualize_interval > 0:
+            self.visualize_dir = os.path.join(cfg.exp_dir, "visualisations")
+
     @torch.no_grad()
     def evaluate_sequence(
         self,
         model,
         test_dataloader: torch.utils.data.DataLoader,
-        only_foreground: bool = False,
         is_real_data: bool = False,
         step=None,
         writer=None,
-        train_mode=False,
-        visualize_errors=False,
-        save_epe_thresholds=False
+        train_mode=False
     ):
         model.eval()
         per_batch_eval_results = []
@@ -51,8 +55,6 @@ class MIMOEvaluatorSimplified(BaseEvaluator):
         if self.visualize_interval > 0:
             os.makedirs(self.visualize_dir, exist_ok=True)
             
-        if save_epe_thresholds:
-            epe_thresholds = [0]*100
         for batch_idx, sequence in enumerate(tqdm(test_dataloader)):
             batch_dict = defaultdict(list)
             batch_dict["stereo_video"] = sequence['img']
@@ -84,19 +86,10 @@ class MIMOEvaluatorSimplified(BaseEvaluator):
                 batch_eval_result, seq_length = eval_batch_mimo(
                     batch_dict,
                     predictions,
-                    ref_frame=ref_frame,
-                    only_foreground=only_foreground,
-                    return_epe=visualize_errors or save_epe_thresholds
+                    ref_frame=ref_frame
                     
                 )
-                if visualize_errors or save_epe_thresholds:
-                    # assert 'disp_endpoint_error_per_pixel' in batch_eval_result
-                    disp_endpoint_error_per_pixel = batch_eval_result['disp_endpoint_error_per_pixel']
-                    del batch_eval_result['disp_endpoint_error_per_pixel']
-                    nonzero =  torch.count_nonzero(disp_endpoint_error_per_pixel)
-                    if save_epe_thresholds:
-                        for bad_px in range(1, 100):
-                            epe_thresholds[bad_px] += ((disp_endpoint_error_per_pixel > (bad_px/10.)).sum() / torch.clamp( nonzero, 1e-5)).item()
+                
                 per_batch_eval_results.append((batch_eval_result, seq_length))
                 pretty_print_perception_metrics(batch_eval_result)
 
@@ -106,7 +99,6 @@ class MIMOEvaluatorSimplified(BaseEvaluator):
                 perception_prediction = PerceptionPrediction()
                 if "disparity" in predictions:
                     pred_disp = predictions["disparity"]
-                    print('pred_disp',pred_disp.shape)
                     pred_disp[pred_disp < self.eps] = self.eps
 
                     scale = depth2disparity_scale(
@@ -128,7 +120,6 @@ class MIMOEvaluatorSimplified(BaseEvaluator):
                         batch_dict["stereo_original_video"]
                         .clone()
                     )
-                    print('vis vid',batch_dict["stereo_video"].shape)
 
                 for k,v in batch_dict.items():
                     if isinstance(v, torch.Tensor):
@@ -139,14 +130,9 @@ class MIMOEvaluatorSimplified(BaseEvaluator):
                     ref_frame,
                     perception_prediction,
                     self.visualize_dir,
-                    only_foreground=only_foreground,
                     sequence_name=sequence['metadata'][0][0][0],
                     step=step,
                     writer=writer,
-                    disp_endpoint_error_per_pixel=disp_endpoint_error_per_pixel if visualize_errors else None
+                    disp_endpoint_error_per_pixel=None
                 )
-        if save_epe_thresholds:
-            for bad_px in range(1, 100):
-                epe_thresholds[bad_px] = epe_thresholds[bad_px] / float(len(test_dataloader))
-            torch.save(torch.tensor(epe_thresholds), os.path.join(self.exp_dir,'epe_thresholds.pth'))
         return per_batch_eval_results

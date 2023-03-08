@@ -11,8 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
 import hydra
-import numpy as np
-from pixar_replay.core.evaluation.eval_utils import BaseEvaluator
+import numpy as np\
 
 import torch
 from omegaconf import OmegaConf
@@ -24,35 +23,28 @@ import dynamic_stereo.datasets.mimo_datasets as datasets
 
 from dynamic_stereo.models.core.model_zoo import get_all_model_default_configs, model_zoo
 from pytorch3d.implicitron.tools.config import get_default_args_field
-from dynamic_stereo.evaluation.core.mimo_evaluator import MIMOEvaluatorSimplified
+from dynamic_stereo.evaluation.core.evaluator import Evaluator
 
 
 @dataclass(eq=False)
 class DefaultConfig:
     exp_dir: str = "./outputs"
-    exp_idx: int = 0
 
-
-    dataset_name: str ='dynamicstereo'
-    # sintel, dynamicstereo, things
+    # one of [sintel, dynamicreplica, things]
+    dataset_name: str ='dynamicreplica'
+    
     sample_len: int = -1
     dstype: Optional[str] = None
     # clean, final
-    additional_images: bool = True
-    visualize_errors: bool = False
-    only_foreground: bool = False
     MODEL: Dict[str, Any] = field(
         default_factory=lambda: get_all_model_default_configs()
     )
-    EVALUATOR: Dict[str, Any] = get_default_args_field(BaseEvaluator)
+    EVALUATOR: Dict[str, Any] = get_default_args_field(Evaluator)
 
     seed: int = 42
     gpu_idx: int = 0
 
     visualize_interval: int = 0  # Use 0 for no visualization
-    visdom_env: str = "visualizer"
-    visdom_port: int = 8097
-    visdom_server: str = "http://localhost"
 
     # Override hydra's working directory to current working dir,
     # also disable storing the .hydra logs:
@@ -81,24 +73,18 @@ def run_eval(cfg: DefaultConfig):
     torch.manual_seed(cfg.seed)
     np.random.seed(cfg.seed)
 
-    evaluator = MIMOEvaluatorSimplified(**cfg.EVALUATOR)
+    evaluator = Evaluator(**cfg.EVALUATOR)
     
     model = model_zoo(**cfg.MODEL)
     model.cuda(0)
     evaluator.setup_visualization(cfg)
     
-    if cfg.dataset_name=='dynamicstereo':
+    if cfg.dataset_name=='dynamicreplica':
         test_dataloader = datasets.DynamicStereoDataset(split='test', sample_len=cfg.sample_len, only_first_n_samples=1)
     elif cfg.dataset_name=='sintel':
         test_dataloader = datasets.SequenceSintelStereo(dstype=cfg.dstype)
-    elif cfg.dataset_name=='eth3d':
-        test_dataloader = datasets.SequenceETH3D()
-    elif cfg.dataset_name.startswith("middlebury_"):
-        test_dataloader = datasets.SequenceMiddlebury(split=cfg.dataset_name.replace('middlebury_',''))
     elif cfg.dataset_name=='things':
         test_dataloader = datasets.SequenceSceneFlowDatasets({}, dstype=cfg.dstype, sample_len=cfg.sample_len, add_monkaa=False, add_driving=False, things_test=True)
-    elif cfg.dataset_name=='kitti':
-        test_dataloader = datasets.SequenceKITTI({}, additional_images=cfg.additional_images)
     elif cfg.dataset_name=='real':
         for real_sequence_name in ['teddy2_shorter','ignacio_waving', 'Nikita_reading']:
             ds_path =f'/checkpoint/nikitakaraev/2022_mimo/datasets/zedmini_sequences/{real_sequence_name}'
@@ -121,19 +107,13 @@ def run_eval(cfg: DefaultConfig):
     evaluate_result = evaluator.evaluate_sequence(
         model,
         test_dataloader,
-        cfg.only_foreground,
-        visualize_errors=cfg.visualize_errors
     )
 
     aggreegate_result = aggregate_and_print_results(
         evaluate_result
     )
-    fname = f"result_eval_"
-    if cfg.only_foreground:
-        fname += "fg_only"
-    else:
-        fname += "full_scene"
-    result_file = os.path.join(cfg.exp_dir, fname + ".json")
+    
+    result_file = os.path.join(cfg.exp_dir, f"result_eval_.json")
 
     print(f"Dumping eval results to {result_file}.")
     with open(result_file, "w") as f:
