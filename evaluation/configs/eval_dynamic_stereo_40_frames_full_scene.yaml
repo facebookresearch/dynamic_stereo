@@ -1,0 +1,43 @@
+defaults:
+  - default_config_eval
+visualize_interval: 0
+# exp_dir: ./outputs_raft_flow_v2
+exp_dir: ./outputs/outputs_mimo_3dcnn_vis_v2
+sample_len: 40
+visualize_errors: True
+save_epe_thresholds: True
+MODEL:
+    model_name: MIMOtrajectories3DCNNModel
+    # kernel_size: 15
+    # model_name: RaftFlowModel
+    # model_name: RAFTStereoModel
+# DATALOADER:
+#     dataloader_name: pixar_rig_perception
+#     # dataset_len: 1000
+#     num_workers: 0
+#     EVAL_BATCHES_FILTER:
+#       filter_type: temporal_window
+#       # RANDOM_SUBSET_FILTER:
+#       #   num_batches: 2
+#       TEMPORAL_WINDOW_FILTER:
+#         num_past_frames: 0
+#         num_future_frames: 179
+#         step: 1800
+# DATASET:
+#     assert_single_seq: false
+#     category: ""
+#     dataset_name: pixar_perception
+#     dataset_root: /large_experiments/p3/replay/datasets/synthetic/replica_animals/pixar_humans_animals_benchmark/dataset
+#     limit_to: -1
+#     limit_sequences_to: -1
+#     mask_depths: false
+#     mask_images: false
+#     test_on_train: false
+#     n_frames_per_sequence: -1
+#     only_test_set: true
+#     dataset_kwargs:
+#       box_crop: false
+#       image_width: null
+#       image_height: null
+#       remove_empty_masks: false
+#       load_matching_annots: True
