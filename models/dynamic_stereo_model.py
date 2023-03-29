@@ -2,7 +2,7 @@ from typing import ClassVar
 
 import torch
 from pytorch3d.implicitron.tools.config import Configurable
-from mimo_networks.RAFT_MIMO.core.nets.dynamic_stereo import DynamicStereo
+from dynamic_stereo.models.core.dynamic_stereo import DynamicStereo
 
 autocast = torch.cuda.amp.autocast
 
@@ -39,7 +39,7 @@ class DynamicStereoModel(Configurable, torch.nn.Module):
 
 
     def forward(self, batch_dict, iters=20):
-        return self.model.forward_batch_test_cut_preds(
+        return self.model.forward_batch_test(
             batch_dict,
             mixed_prec=self.mixed_precision,
             flow_frame_list=None,

@@ -1,7 +1,7 @@
 import copy
 from mimo.models.cre_stereo import CREStereoModel
 from mimo.models.cre_stereo_megengine import CREStereoMegengineModel
-from mimo.models.dynamic_stereo import DynamicStereoModel
+from dynamic_stereo.models.dynamic_stereo_model import DynamicStereoModel
 from mimo.models.holograms import HologramsModel
 from mimo.models.raft_stereo import RAFTStereoModel
 from pytorch3d.implicitron.tools.config import get_default_args
