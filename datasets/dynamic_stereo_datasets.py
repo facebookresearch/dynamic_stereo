@@ -9,17 +9,12 @@ import torch.nn.functional as F
 import logging
 import os
 import copy
-import random
-from pathlib import Path
 from glob import glob
 import os.path as osp
-import sys
-import cv2
+from dynamic_stereo.evaluation.utils.eval_utils import depth2disparity_scale
 
-sys.path.append('/private/home/nikitakaraev/dev/')
-from mimo_networks.utils.utils import depth2disparity_scale
-from mimo_networks.RAFT_MIMO.core.utils import frame_utils
-from mimo_networks.RAFT_MIMO.core.utils.augmentor import SequenceDispFlowAugmentor
+from dynamic_stereo.datasets import frame_utils
+from dynamic_stereo.datasets.augmentor import SequenceDispFlowAugmentor
 from collections import defaultdict
 from PIL import Image
 import gzip
@@ -33,7 +28,6 @@ from pytorch3d.implicitron.dataset.types import (
 class DynamicReplicaFrameAnnotation(ImplicitronFrameAnnotation):
     """A dataclass used to load annotations from json."""
 
-    matching_annot_path: Optional[str] = None
     camera_name: Optional[str] = None
 
 class StereoSequenceDataset(data.Dataset):
@@ -70,10 +64,8 @@ class StereoSequenceDataset(data.Dataset):
         self,
         entry_viewpoint,
         image_size,
-        scale: float,
-        # clamp_bbox_xyxy: Optional[torch.Tensor],
+        scale: float
     ) -> PerspectiveCameras:
-        # entry_viewpoint = entry.viewpoint
         assert entry_viewpoint is not None
         # principal point and focal length
         principal_point = torch.tensor(
@@ -98,15 +90,10 @@ class StereoSequenceDataset(data.Dataset):
         # principal point and focal length in pixels
         principal_point_px = half_image_size_wh_orig - principal_point * rescale
         focal_length_px = focal_length * rescale
-        # if self.box_crop:
-        #     assert clamp_bbox_xyxy is not None
-        #     principal_point_px -= clamp_bbox_xyxy[:2]
 
         # now, convert from pixels to PyTorch3D v0.5+ NDC convention
         # if self.image_height is None or self.image_width is None:
         out_size = list(reversed(image_size))
-        # else:
-        #     out_size = [self.image_width, self.image_height]
 
         half_image_size_output = torch.tensor(out_size, dtype=torch.float) / 2.0
         half_min_image_size_output = half_image_size_output.min()
@@ -124,7 +111,7 @@ class StereoSequenceDataset(data.Dataset):
             T=torch.tensor(entry_viewpoint.T, dtype=torch.float)[None],
         )
 
-    def get_output_tensor(self, sample):
+    def _get_output_tensor(self, sample):
         output_tensor = defaultdict(list)
         sample_size = len(sample['image']['left'])
         output_tensor_keys = ['img', 'disp','valid_disp','mask']
@@ -200,14 +187,10 @@ class StereoSequenceDataset(data.Dataset):
 
                     disp = depth2disp_scale / depth
                     disp[depth_mask] = 0
-                    # print('disp',disp[disp>0].shape,disp[disp>0])
                     valid_disp = (disp < 512) * (1-depth_mask) 
 
-                    # print('valid_disp',valid_disp.sum())
                     disp = np.array(disp).astype(np.float32)
                     disp = np.stack([-disp, np.zeros_like(disp)], axis=-1)
-                    # print('disp',disp.shape)
-                    # print('valid_disp',valid_disp.shape,valid_disp.max(),valid_disp.min())
                     output_tensor['disp'][i].append(disp)
                     output_tensor['valid_disp'][i].append(valid_disp)
                     
@@ -231,13 +214,13 @@ class StereoSequenceDataset(data.Dataset):
         index = index % len(self.sample_list)
         
         try:
-            output_tensor = self.get_output_tensor(sample)
+            output_tensor = self._get_output_tensor(sample)
         except:
-            print('except')
+            logging.warning(f"Exception in loading sample {index}!")
             index = np.random.randint(len(self.sample_list))  
-            print('new index', index)
+            logging.info(f"New index is {index}")
             sample = self.sample_list[index]    
-            output_tensor = self.get_output_tensor(sample)
+            output_tensor = self._get_output_tensor(sample)
         sample_size = len(sample['image']['left'])  
         
         if self.augmentor is not None:
@@ -276,15 +259,14 @@ class StereoSequenceDataset(data.Dataset):
             res['viewpoint'] = output_tensor['viewpoint']
         if 'metadata' in output_tensor and self.split!='train':
             res['metadata'] = output_tensor['metadata']
+        
         for k, v in output_tensor.items():
-            # print(k,v)
             if k!='viewpoint' and k!='metadata':
                 for i in range(len(v)):
                     if len(v[i])>0:
                         v[i] = torch.stack(v[i])
                 if len(v)>0 and (len(v[0])>0):
                     res[k] = torch.stack(v)
-        # return sample, output_tensor
         return res
 
     def __mul__(self, v):
@@ -298,15 +280,15 @@ class StereoSequenceDataset(data.Dataset):
 
 
 class DynamicReplicaDataset(StereoSequenceDataset):
-    def __init__(self, aug_params=None, root='/large_experiments/p3/replay/datasets/synthetic/replica_animals/dynamic_replica/dataset/', split='train', sample_len=-1, only_first_n_samples=-1, is_real_data=False):
+    def __init__(self, aug_params=None, root='/large_experiments/p3/replay/datasets/synthetic/replica_animals/dynamic_replica_release/', split='train', sample_len=-1, only_first_n_samples=-1):
         super(DynamicReplicaDataset, self).__init__(aug_params)
         self.root = root
         self.sample_len = sample_len
         self.split = split
         
         frame_annotations_file = f'frame_annotations_{split}.jgz'
-        print('osp.join(root, frame_annotations_file)',osp.join(root, frame_annotations_file))
-        with gzip.open(osp.join(root, frame_annotations_file), "rt", encoding="utf8") as zipfile:
+        
+        with gzip.open(osp.join(root, split, frame_annotations_file), "rt", encoding="utf8") as zipfile:
             frame_annots_list = load_dataclass(
                         zipfile, List[DynamicReplicaFrameAnnotation]
                     )
@@ -314,38 +296,31 @@ class DynamicReplicaDataset(StereoSequenceDataset):
         for frame_annot in frame_annots_list:
             seq_annot[frame_annot.sequence_name][frame_annot.camera_name].append(frame_annot)
 
-        total_frames=0
-        total_seqs=0
         for seq_name in seq_annot.keys():
-            if seq_name=='8369cb-7_obj' or seq_name=='a7b915-7_obj':
-                continue
-            images, depths, viewpoints, metadata, masks = defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list)
-            
+            filenames = defaultdict(lambda: defaultdict(list))
             for cam in ['left','right']:
                 for framedata in seq_annot[seq_name][cam]:
-                    
                     im_path = osp.join(root, split, framedata.image.path)
-                    if is_real_data:
-                        im_path=im_path.replace('/checkpoint/nikitakaraev/2022_mimo/datasets/zedmini_sequences/', \
-                            '/checkpoint/nikitakaraev/2022_mimo/datasets/zedmini_sequences/')
-                    assert os.path.isfile(im_path), im_path
-                    images[cam].append(im_path)
-                    viewpoints[cam].append(framedata.viewpoint)
-                    metadata[cam].append([framedata.sequence_name, framedata.image.size])
                     depth_path = osp.join(root, split, framedata.depth.path)
-                    
-                    depths[cam].append(depth_path)
-                    assert os.path.isfile(depth_path), depth_path 
-                    mask_path = osp.join(root, split, framedata.mask.path)                    
-                    assert os.path.isfile(mask_path), mask_path
-                    masks[cam].append(mask_path)
-                    assert len(images[cam])==len(masks[cam])>0, framedata.sequence_name
-                    
-                    assert len(images[cam])==len(depths[cam])==len(viewpoints[cam])==len(metadata[cam])>0, framedata.sequence_name
+                    mask_path = osp.join(root, split, framedata.mask.path)
 
-            seq_len = len(images[cam])
-            total_frames+=seq_len
-            total_seqs+=1
+                    assert os.path.isfile(im_path), im_path
+                    assert os.path.isfile(depth_path), depth_path 
+                    assert os.path.isfile(mask_path), mask_path
+
+                    filenames['image'][cam].append(im_path)
+                    filenames['depth'][cam].append(depth_path)
+                    filenames['mask'][cam].append(mask_path)
+
+                    filenames['viewpoint'][cam].append(framedata.viewpoint)
+                    filenames['metadata'][cam].append([framedata.sequence_name, framedata.image.size])
+                    
+                    for k in filenames.keys():
+                        assert len(filenames[k][cam])==len(filenames['image'][cam])>0, framedata.sequence_name 
+                        
+
+            seq_len = len(filenames['image'][cam])
+            
             print('seq_len', seq_name, seq_len)
             if split=='train':
                 for ref_idx in range(0, seq_len, 3):
@@ -354,34 +329,29 @@ class DynamicReplicaDataset(StereoSequenceDataset):
                         sample = defaultdict(lambda: defaultdict(list))
                         for cam in ['left','right']:
                             for idx in range(ref_idx, ref_idx+step*self.sample_len, step):
-                                # print('idx',idx, 'images[cam]',len(images[cam]),'sample[image]',len(sample['image']))
-                                sample['image'][cam].append(images[cam][idx])
-                                sample['depth'][cam].append(depths[cam][idx])
-                                sample['viewpoint'][cam].append(viewpoints[cam][idx])
-                                sample['metadata'][cam].append(metadata[cam][idx])
+                                for k in filenames.keys():
+                                    if 'mask' not in k:
+                                        sample[k][cam].append(filenames[k][cam][idx])
+                                
                         self.sample_list.append(sample)
             else:
                 step = self.sample_len if self.sample_len>0 else seq_len
                 counter=0
-                # print('seq_len',seq_len)
+                
                 for ref_idx in range(0, seq_len, step):
                     sample = defaultdict(lambda: defaultdict(list))
                     for cam in ['left','right']:
                         for idx in range(ref_idx, ref_idx+step):
-                            
-                            sample['image'][cam].append(images[cam][idx])
-                            sample['viewpoint'][cam].append(viewpoints[cam][idx])
-                            sample['metadata'][cam].append(metadata[cam][idx])
-                            sample['depth'][cam].append(depths[cam][idx])
-                            sample['mask'][cam].append(masks[cam][idx])
+                            for k in filenames.keys():
+                                sample[k][cam].append(filenames[k][cam][idx])
                             
                     self.sample_list.append(sample)
                     counter+=1
                     if only_first_n_samples>0 and counter>=only_first_n_samples:
                         break 
         
-        print(f"Added {len(self.sample_list)} from DynamicStereo {split}")
-        logging.info(f"Added {len(self.sample_list)} from DynamicStereo {split}")
+        print(f"Added {len(self.sample_list)} from Dynamic Replica {split}")
+        logging.info(f"Added {len(self.sample_list)} from Dynamic Replica {split}")
 
 
 
@@ -513,7 +483,7 @@ class SequenceSintelStereo(StereoSequenceDataset):
         
         for cam in ['left','right']:
             image_paths[cam] = sorted( glob(osp.join(image_root, f'{self.dstype}_{cam}/*')) )
-            print('image_paths',image_paths)
+
         cam ='left'
         disparity_paths[cam] = [ path.replace(f'{self.dstype}_{cam}', 'disparities') for path in image_paths[cam] ]
 
@@ -573,7 +543,7 @@ def fetch_dataloader(args):
         new_dataset = clean_dataset + final_dataset
 
     if add_dynamic_replica:
-        dr_dataset = DynamicReplicaDataset(aug_params, root='/large_experiments/p3/replay/datasets/synthetic/replica_animals/dynamic_replica_random_baseline/dataset', split='train', sample_len=args.sample_len)
+        dr_dataset = DynamicReplicaDataset(aug_params, split='train', sample_len=args.sample_len)
         if new_dataset is None:
             new_dataset = dr_dataset
         else:

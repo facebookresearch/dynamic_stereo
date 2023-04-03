@@ -3,6 +3,7 @@ defaults:
 visualize_interval: 1
 exp_dir: ./outputs/dynamic_stereo_real
 dataset_name: real
+sample_len: 60
 MODEL:
     model_name: DynamicStereoModel
    

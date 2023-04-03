@@ -11,12 +11,11 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
 import hydra
-import numpy as np\
+import numpy as np
 
 import torch
 from omegaconf import OmegaConf
-sys.path.append("/private/home/nikitakaraev/dev/cvpr_2023")
-sys.path.append("/private/home/nikitakaraev/dev/")
+
 from dynamic_stereo.evaluation.utils.utils import aggregate_and_print_results
 
 import dynamic_stereo.datasets.dynamic_stereo_datasets as datasets
@@ -86,12 +85,12 @@ def run_eval(cfg: DefaultConfig):
     elif cfg.dataset_name=='things':
         test_dataloader = datasets.SequenceSceneFlowDatasets({}, dstype=cfg.dstype, sample_len=cfg.sample_len, add_monkaa=False, add_driving=False, things_test=True)
     elif cfg.dataset_name=='real':
-        for real_sequence_name in ['teddy2_shorter','ignacio_waving', 'Nikita_reading']:
-            ds_path =f'/checkpoint/nikitakaraev/2022_mimo/datasets/zedmini_sequences/{real_sequence_name}'
+        for real_sequence_name in ['teddy_static','ignacio_waving', 'nikita_reading']:
+            ds_path =f'/large_experiments/p3/replay/datasets/synthetic/replica_animals/dynamic_replica_release/real/{real_sequence_name}'
             # seq_len_real = 20
             real_dataset = datasets.DynamicReplicaDataset(
                 split='test',
-                is_real_data=True, 
+                sample_len=cfg.sample_len,
                 root=ds_path, 
                 only_first_n_samples=1)
 

@@ -1,22 +1,13 @@
 import copy
-from mimo.models.cre_stereo import CREStereoModel
-from mimo.models.cre_stereo_megengine import CREStereoMegengineModel
 from dynamic_stereo.models.dynamic_stereo_model import DynamicStereoModel
-from mimo.models.holograms import HologramsModel
-from mimo.models.raft_stereo import RAFTStereoModel
+from dynamic_stereo.models.raft_stereo_model import RAFTStereoModel
 from pytorch3d.implicitron.tools.config import get_default_args
 
-from mimo.models.unimatch_stereo import UniMatchStereoModel
 
 
 MODELS = [
     RAFTStereoModel,
-    HologramsModel,
-    DynamicStereoModel,
-    CREStereoModel,
-    CREStereoMegengineModel,
-    UniMatchStereoModel
-    
+    DynamicStereoModel
 ]
 
 _MODEL_NAME_TO_MODEL = {model_cls.__name__: model_cls for model_cls in MODELS}

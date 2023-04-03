@@ -114,7 +114,7 @@ class Evaluator(Configurable):
                     if isinstance(v, torch.Tensor):
                         batch_dict[k] = v.cuda()
 
-                outputs = visualize_batch(
+                visualize_batch(
                     batch_dict,
                     perception_prediction,
                     output_dir=self.visualize_dir,
