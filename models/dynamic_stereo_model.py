@@ -11,7 +11,7 @@ class DynamicStereoModel(Configurable, torch.nn.Module):
 
     MODEL_CONFIG_NAME: ClassVar[str] = "DynamicStereoModel"
 
-    model_weights: str = '/checkpoint/nikitakaraev/2022_mimo/experiments/2022_11_02_DynamicStereo_120k_sample_len_5_update_3d_different_blocks_self_cross_temporal_update_time_update_space/model_raft-stereo_073729.pth'
+    model_weights: str = '/large_experiments/p3/replay/datasets/synthetic/replica_animals/dynamic_replica_release/checkpoints/dynamic_stereo_sf.pth'
     kernel_size: int = 20
 
     def __post_init__(self):
