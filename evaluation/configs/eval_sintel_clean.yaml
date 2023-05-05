@@ -1,0 +1,9 @@
+defaults:
+  - default_config_eval
+visualize_interval: -1
+exp_dir: ./outputs/dynamic_stereo_sintel_clean
+sample_len: 30
+dataset_name: sintel
+dstype: clean
+MODEL:
+    model_name: DynamicStereoModel
