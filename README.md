@@ -29,6 +29,7 @@ Download `links.json` from the *data* tab on the [project website](https://dynam
 ```
 git clone https://github.com/facebookresearch/dynamic_stereo
 cd dynamic_stereo
+export PYTHONPATH=`(cd ../ && pwd)`:`pwd`:$PYTHONPATH
 ```
 Add the downloaded `links.json` file to the project folder. Use flag `download_splits` to choose dataset splits that you want to download: 
 ```
