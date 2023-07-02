@@ -6,7 +6,7 @@
 
 import os
 from collections import defaultdict
-
+import torch.nn.functional as F
 import torch
 from tqdm import tqdm
 from omegaconf import DictConfig
@@ -46,6 +46,7 @@ class Evaluator(Configurable):
         step=None,
         writer=None,
         train_mode=False,
+        interp_shape=None,
     ):
         model.eval()
         per_batch_eval_results = []
@@ -66,6 +67,16 @@ class Evaluator(Configurable):
                     batch_dict["fg_mask"] = torch.ones_like(
                         batch_dict["disparity_mask"]
                     )
+            elif interp_shape is not None:
+                left_video = batch_dict["stereo_video"][:, 0]
+                left_video = F.interpolate(
+                    left_video, tuple(interp_shape), mode="bilinear"
+                )
+                right_video = batch_dict["stereo_video"][:, 1]
+                right_video = F.interpolate(
+                    right_video, tuple(interp_shape), mode="bilinear"
+                )
+                batch_dict["stereo_video"] = torch.stack([left_video, right_video], 1)
 
             if train_mode:
                 predictions = model.forward_batch_test(batch_dict)
