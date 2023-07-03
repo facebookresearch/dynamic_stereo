@@ -16,7 +16,7 @@ https://user-images.githubusercontent.com/37815420/236239579-7877623c-716b-4074-
 
 The dataset consists of 145200 *stereo* frames (524 videos) with humans and animals in motion. 
 
-We provide annotations for both *left and right* views, see [this notebook](https://github.com/facebookresearch/dynamic_stereo/notebooks/Dynamic_Replica_demo.ipynb): 
+We provide annotations for both *left and right* views, see [this notebook](https://github.com/facebookresearch/dynamic_stereo/blob/main/notebooks/Dynamic_Replica_demo.ipynb):  
 - camera intrinsics and extrinsics
 - image depth (can be converted to disparity with intrinsics)
 - instance segmentation masks
