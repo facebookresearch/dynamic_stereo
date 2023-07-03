@@ -16,13 +16,14 @@ https://user-images.githubusercontent.com/37815420/236239579-7877623c-716b-4074-
 
 The dataset consists of 145200 *stereo* frames (524 videos) with humans and animals in motion. 
 
-We provide annotations for both *left and right* views: 
+We provide annotations for both *left and right* views, see [this notebook](https://github.com/facebookresearch/dynamic_stereo/notebooks/Dynamic_Replica_demo.ipynb): 
 - camera intrinsics and extrinsics
 - image depth (can be converted to disparity with intrinsics)
 - instance segmentation masks
 - binary foreground / background segmentation masks
-- optical flow **(coming in June 2023)**
-- long-range pixel trajectories **(coming in June 2023)**
+- optical flow (released!)
+- long-range pixel trajectories (released!)
+
 
 ### Download the Dynamic Replica dataset
 Download `links.json` from the *data* tab on the [project website](https://dynamic-stereo.github.io/) after accepting the license agreement.
@@ -37,11 +38,11 @@ python ./scripts/download_dynamic_replica.py --link_list_file links.json \
 --download_folder ./dynamic_replica_data --download_splits real valid test train
 ```
 
-Memory requirements for dataset splits after unpacking:
-- train - 417G
-- test - 55G
-- valid - 19G
-- real - 186M
+Memory requirements for dataset splits after unpacking (with all the annotations):
+- train - 1.8T
+- test - 328G
+- valid - 106G
+- real - 152M
 
 You can use [this PyTorch dataset class](https://github.com/facebookresearch/dynamic_stereo/blob/dfe2907faf41b810e6bb0c146777d81cb48cb4f5/datasets/dynamic_stereo_datasets.py#L287) to iterate over the dataset.
 
