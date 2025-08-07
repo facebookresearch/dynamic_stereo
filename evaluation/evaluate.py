@@ -85,7 +85,7 @@ def run_eval(cfg: DefaultConfig):
     elif cfg.dataset_name == "sintel":
         test_dataloader = datasets.SequenceSintelStereo(dstype=cfg.dstype)
     elif cfg.dataset_name == "things":
-        test_dataloader = datasets.SequenceSceneFlowDatasets(
+        test_dataloader = datasets.SequenceSceneFlowDataset(
             {},
             dstype=cfg.dstype,
             sample_len=cfg.sample_len,
