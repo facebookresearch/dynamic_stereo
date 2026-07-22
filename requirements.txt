@@ -8,7 +8,7 @@ numpy==1.23.5
 omegaconf==2.1.0
 opencv_python==4.6.0.66
 opt_einsum==3.3.0
-Pillow==9.5.0
+Pillow==12.3.0
 pytorch_lightning==1.6.0
 requests
 scikit_image==0.19.2
